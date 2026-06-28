@@ -1,5 +1,6 @@
 import boto3
 from config.settings import AWS_REGION
+from botocore.exceptions import ClientError
 
 ec2_client = boto3.client(
     "ec2",
@@ -55,20 +56,42 @@ def list_ec2_instances():
 
 # start ec2 instance 
 def start_ec2_instance(instance_id: str):
+    response = ec2_client.describe_instances(
+        InstanceIds=[instance_id]
+    )
+
+    state = response["Reservations"][0]["Instances"][0]["State"]["Name"]
+
+    if state != "stopped":
+        return f"Instance {instance_id} is currently '{state}' and cannot be started."
+
     ec2_client.start_instances(
         InstanceIds=[instance_id]
     )
 
-    return f"Started instance {instance_id}"
+    return f"Starting instance {instance_id}"
 
 ## Stop instance 
 
 def stop_ec2_instance(instance_id: str):
-    ec2_client.stop_instances(
-        InstanceIds=[instance_id]
-    )
+    try:
+        response = ec2_client.describe_instances(
+            InstanceIds=[instance_id]
+        )
 
-    return f"Stopped instance {instance_id}"
+        state = response["Reservations"][0]["Instances"][0]["State"]["Name"]
+
+        if state != "running":
+            return f"Instance {instance_id} is in '{state}' state and cannot be stopped."
+
+        ec2_client.stop_instances(
+            InstanceIds=[instance_id]
+        )
+
+        return f"Stopping instance {instance_id}"
+
+    except ClientError as e:
+        return f"AWS Error: {str(e)}"
 
 ## TErminate ec2 instance
 
@@ -77,4 +100,7 @@ def terminate_ec2_instance(instance_id: str):
         InstanceIds=[instance_id]
     )
 
-    return f"Terminated instance {instance_id}"
+    return (
+        f"Termination request submitted for {instance_id}. "
+        "Current state: shutting-down."
+    )
